@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Scheduler · Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --border: #2a313c; --text: #e6edf3; --muted: #8b949e;
+    --green: #3fb950; --blue: #58a6ff; --amber: #d29922; --red: #f85149; --purple: #bc8cff; --gray: #6e7681;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 16px 28px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  h1 { font-size: 19px; margin: 0; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .live { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); }
+  .live.ok { color: var(--green); } .live.bad { color: var(--red); }
+  main { padding: 20px 28px 40px; display: grid; gap: 18px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .card .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .card .value { font-size: 24px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .progress { height: 12px; background: #21262d; border-radius: 6px; overflow: hidden; display: flex; }
+  .progress > div { height: 100%; transition: width .5s; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 1050px) { .grid2 { grid-template-columns: 1fr; } }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; overflow-x: auto; }
+  .panel h2 { font-size: 12px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  td.err { white-space: normal; color: var(--muted); max-width: 320px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .bar { height: 8px; background: #21262d; border-radius: 4px; overflow: hidden; min-width: 110px; }
+  .bar > div { height: 100%; background: var(--blue); transition: width .5s; }
+  .pill { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; display: inline-block; }
+  .s-SUCCESS, .s-SUCCEEDED, .s-IDLE { background: rgba(63,185,80,.15); color: var(--green); }
+  .s-BUSY, .s-RUNNING, .s-QUEUED { background: rgba(88,166,255,.15); color: var(--blue); }
+  .s-FAILED, .s-DEAD { background: rgba(248,81,73,.15); color: var(--red); }
+  .s-TIMED_OUT, .s-RETRY_SCHEDULED, .s-WAITING { background: rgba(210,153,34,.15); color: var(--amber); }
+  .s-SKIPPED, .s-CANCELLED { background: rgba(110,118,129,.2); color: var(--muted); }
+  .p-CRITICAL { color: var(--red); } .p-HIGH { color: var(--amber); } .p-MEDIUM { color: var(--blue); } .p-LOW { color: var(--muted); }
+  .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+  form { display: flex; gap: 8px; margin-bottom: 10px; }
+  input { flex: 1; background: #0d1117; border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: 13px; }
+  button { background: #238636; border: 0; color: white; border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+  .hint { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Job Scheduling &amp; Resource Allocation Engine</h1>
+    <div class="sub" id="subtitle">connecting…</div>
+  </div>
+  <span class="live" id="live">●</span>
+</header>
+
+<main>
+  <section class="cards" id="statusCards"></section>
+
+  <section class="panel">
+    <h2>Overall progress</h2>
+    <div class="progress" id="progress"></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <section class="cards" id="metricCards"></section>
+
+  <section class="grid2">
+    <div class="panel">
+      <h2>Workers (resource utilization)</h2>
+      <table><thead><tr><th>Worker</th><th>Status</th><th>Current job</th><th class="num">Tasks</th><th>Utilization</th></tr></thead>
+        <tbody id="workers"></tbody></table>
+    </div>
+    <div class="panel">
+      <h2>Job types</h2>
+      <table><thead><tr><th>Type</th><th class="num">Attempts</th><th class="num">Avg execution</th></tr></thead>
+        <tbody id="types"></tbody></table>
+      <h2 style="margin-top:18px">Scheduled jobs</h2>
+      <table><thead><tr><th>Name</th><th>Trigger</th><th class="num">Runs</th><th>Next run</th></tr></thead>
+        <tbody id="schedules"></tbody></table>
+    </div>
+  </section>
+
+  <section class="grid2">
+    <div class="panel">
+      <h2>Dead letter queue</h2>
+      <div id="dlq"></div>
+    </div>
+    <div class="panel">
+      <h2>Look up a job</h2>
+      <form id="lookup">
+        <input id="jobId" placeholder="e.g. REP-C100, INV-C001-01, EMAIL-0400, JOB-000001" autocomplete="off">
+        <button type="submit">Search</button>
+      </form>
+      <div id="jobResult" class="hint">Shows the job's status and every attempt it made (from SQLite).</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Recent executions (from SQLite history)</h2>
+    <table><thead><tr><th>Job</th><th>Name</th><th>Type</th><th>Priority</th><th class="num">Attempt</th><th>Worker</th><th>Result</th><th class="num">Duration</th><th>Error</th></tr></thead>
+      <tbody id="history"></tbody></table>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pill = s => `<span class="pill s-${esc(s)}">${esc(s)}</span>`;
+const fmt = n => Number(n).toLocaleString();
+const time = ms => ms ? new Date(ms).toLocaleTimeString() : '—';
+
+const STATUS_COLORS = { SUCCEEDED: 'var(--green)', RUNNING: 'var(--blue)', QUEUED: '#30476b', WAITING: 'var(--amber)',
+                        RETRY_SCHEDULED: '#9e6a03', DEAD: 'var(--red)', SKIPPED: 'var(--gray)', CANCELLED: '#444c56' };
+
+function render(s, history) {
+  const c = s.counts;
+  $('subtitle').textContent = `Uptime ${(s.uptimeMs/1000).toFixed(1)}s · ${s.workers.length} workers · strategy: ${s.metrics.strategy}`;
+
+  const cards = [['Submitted', s.submitted], ['Queued', c.QUEUED], ['Waiting (deps)', c.WAITING], ['Running', c.RUNNING],
+                 ['Retrying', c.RETRY_SCHEDULED], ['Succeeded', c.SUCCEEDED], ['Dead (DLQ)', c.DEAD], ['Skipped', c.SKIPPED], ['Cancelled', c.CANCELLED]];
+  $('statusCards').innerHTML = cards.map(([l, v]) => `<div class="card"><div class="label">${l}</div><div class="value">${fmt(v)}</div></div>`).join('');
+
+  const total = Math.max(1, Object.values(c).reduce((a, b) => a + b, 0));
+  const order = ['SUCCEEDED', 'DEAD', 'SKIPPED', 'CANCELLED', 'RUNNING', 'RETRY_SCHEDULED', 'QUEUED', 'WAITING'];
+  $('progress').innerHTML = order.map(k => `<div title="${k}: ${c[k]}" style="width:${100*c[k]/total}%;background:${STATUS_COLORS[k]}"></div>`).join('');
+  $('legend').innerHTML = order.map(k => `<span><span class="dot" style="background:${STATUS_COLORS[k]}"></span>${k} ${fmt(c[k])}</span>`).join('');
+
+  const m = s.metrics;
+  const metricCards = [['Throughput', fmt(Math.round(m.throughputPerMin)) + '/min'], ['Avg queue wait', fmt(m.avgWaitMs) + ' ms'],
+                       ['Retries', fmt(m.retries)], ['Failed attempts', fmt(m.failedAttempts)], ['Timeouts', fmt(m.timeouts)], ['Avg utilization', m.utilization + '%']];
+  $('metricCards').innerHTML = metricCards.map(([l, v]) => `<div class="card"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
+
+  $('workers').innerHTML = s.workers.map(w => `<tr><td>${esc(w.id)}</td><td>${pill(w.status)}</td><td>${esc(w.currentJob || '—')}</td>
+      <td class="num">${fmt(w.tasksHandled)}</td><td><div class="bar"><div style="width:${Math.min(100, w.utilization)}%"></div></div>
+      <span class="hint">${w.utilization}%</span></td></tr>`).join('');
+
+  $('types').innerHTML = s.types.map(t => `<tr><td>${esc(t.type)}</td><td class="num">${fmt(t.attempts)}</td><td class="num">${t.avgExecMs} ms</td></tr>`).join('');
+
+  $('schedules').innerHTML = s.schedules.length ? s.schedules.map(x => `<tr><td>${esc(x.name)}</td><td>${esc(x.trigger)}</td>
+      <td class="num">${x.runs}</td><td>${x.active ? time(x.nextFireAt) : '<span class="hint">finished</span>'}</td></tr>`).join('')
+    : `<tr><td colspan="4" class="empty">No scheduled jobs</td></tr>`;
+
+  $('dlq').innerHTML = s.deadLetters.length ? `<table><thead><tr><th>Job</th><th>Name</th><th class="num">Attempts</th><th>Last error</th></tr></thead><tbody>
+      ${s.deadLetters.map(d => `<tr><td>${esc(d.id)}</td><td>${esc(d.name)}</td><td class="num">${d.attempts}</td><td class="err">${esc(d.lastError)}</td></tr>`).join('')}
+      </tbody></table>` : '<div class="empty">Empty, nothing has failed permanently.</div>';
+
+  $('history').innerHTML = history.map(h => `<tr><td>${esc(h.jobId)}</td><td>${esc(h.jobName)}</td><td>${esc(h.type)}</td>
+      <td class="p-${esc(h.priority)}">${esc(h.priority)}</td><td class="num">${h.attempt}</td><td>${esc(h.workerId)}</td><td>${pill(h.status)}</td>
+      <td class="num">${fmt(h.durationMs)} ms</td><td class="err">${esc(h.error || '')}</td></tr>`).join('');
+}
+
+async function refresh() {
+  try {
+    const [stats, history] = await Promise.all([
+      fetch('/api/stats').then(r => r.json()),
+      fetch('/api/history?limit=25').then(r => r.json())
+    ]);
+    render(stats, history);
+    $('live').textContent = '● live'; $('live').className = 'live ok';
+  } catch (e) {
+    $('live').textContent = '● disconnected'; $('live').className = 'live bad';
+  }
+}
+
+$('lookup').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id = $('jobId').value.trim();
+  if (!id) return;
+  const res = await fetch('/api/job?id=' + encodeURIComponent(id));
+  const data = await res.json();
+  if (!res.ok) { $('jobResult').innerHTML = `<div class="empty">${esc(data.error)}</div>`; return; }
+  const j = data.job;
+  $('jobResult').innerHTML = `
+    <div style="margin-bottom:8px"><b>${esc(j.id)}</b> · ${esc(j.name)} · ${esc(j.type)} · <span class="p-${esc(j.priority)}">${esc(j.priority)}</span> · ${pill(j.status)}</div>
+    <div class="hint" style="margin-bottom:8px">Attempts ${j.attempts} (max retries ${j.maxRetries})${j.dependsOn.length ? ' · depends on ' + j.dependsOn.length + ' job(s): ' + esc(j.dependsOn.slice(0, 5).join(', ')) + (j.dependsOn.length > 5 ? '…' : '') : ''}${j.lastError ? ' · last error: ' + esc(j.lastError) : ''}</div>
+    ${data.attempts.length ? `<table><thead><tr><th class="num">#</th><th>Worker</th><th>Result</th><th class="num">Duration</th><th>Error</th></tr></thead><tbody>
+      ${data.attempts.map(a => `<tr><td class="num">${a.attempt}</td><td>${esc(a.workerId)}</td><td>${pill(a.status)}</td><td class="num">${fmt(a.durationMs)} ms</td><td class="err">${esc(a.error || '')}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">No attempts yet.</div>'}`;
+});
+
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>

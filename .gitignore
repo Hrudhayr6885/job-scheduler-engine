@@ -1,0 +1,14 @@
+# Build output
+target/
+
+# Runtime data (SQLite history is recreated on every run)
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# IDEs / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
